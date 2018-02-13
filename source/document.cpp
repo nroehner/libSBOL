@@ -2039,7 +2039,7 @@ void SBOLObject::update_uri()
     // Add to Document and check for uniqueness of URI
     if (parent.doc)
     {
-        vector<SBOLObject*> matches = parent.doc->find_property_value(SBOL_IDENTITY, obj_id);
+        vector<SBOLObject*> matches = parent.doc->find_property_value(SBOL_IDENTITY, sbol_obj.identity.get());
         if (matches.size() > 1)
             throw SBOLError(DUPLICATE_URI_ERROR, "Cannot update SBOL-compliant URI. An object with URI " + sbol_obj.identity.get() + " is already in the Document");
     }
