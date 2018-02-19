@@ -218,6 +218,9 @@
 %ignore sbol::ComponentDefinition::assemble(std::vector<std::string> list_of_uris, Document& doc);  // Use variant signature defined in this interface file
 %ignore sbol::ComponentDefinition::assemble(std::vector<std::string> list_of_uris);  // Use variant signature defined in this interface file
 %ignore sbol::ComponentDefinition::linearize(std::vector<std::string> list_of_uris);  // Use variant signature defined in this interface file
+%ignore sbol::ComponentDefinition::assemblePrimaryStructure(std::vector<ComponentDefinition*> primary_structure);
+%ignore sbol::ComponentDefinition::assemblePrimaryStructure(std::vector<ComponentDefinition*> primary_structure, Document& doc);
+%ignore sbol::ComponentDefinition::assemblePrimaryStructure(std::vector<std::string> primary_structure);
 %ignore sbol::TopLevel::addToDocument;
 
 // Instantiate STL templates
@@ -856,20 +859,6 @@ TEMPLATE_MACRO_3(Document);
         }
         return;
     }
-
-    void assemblePrimaryStructure(PyObject *list, PyObject *doc)
-    {
-        sbol::Document* cpp_doc;
-        if ((SWIG_ConvertPtr(doc,(void **) &cpp_doc, $descriptor(sbol::Document*),1)) == -1)
-            throw SBOLError(SBOL_ERROR_TYPE_MISMATCH, "Second argument must be a valid Document");
-        std::vector<sbol::ComponentDefinition*> list_of_cdefs = convert_list_to_cdef_vector(list);
-        if (list_of_cdefs.size())
-        {
-            $self->assemblePrimaryStructure(list_of_cdefs, *cpp_doc);
-            return;
-        }
-        return;
-    }
     
     void assemblePrimaryStructure(PyObject *list)
     {
@@ -883,6 +872,21 @@ TEMPLATE_MACRO_3(Document);
         if (list_of_cdefs.size())
         {
             $self->assemblePrimaryStructure(list_of_cdefs);
+            return;
+        }
+        return;
+    }
+    
+    
+    void assemblePrimaryStructure(PyObject *list, PyObject *doc)
+    {        
+        sbol::Document* cpp_doc;
+        if ((SWIG_ConvertPtr(doc,(void **) &cpp_doc, $descriptor(sbol::Document*),1)) == -1)
+            throw SBOLError(SBOL_ERROR_TYPE_MISMATCH, "Second argument must be a valid Document");
+        std::vector<sbol::ComponentDefinition*> list_of_cdefs = convert_list_to_cdef_vector(list);
+        if (list_of_cdefs.size())
+        {
+            $self->assemblePrimaryStructure(list_of_cdefs, *cpp_doc);
             return;
         }
         return;
@@ -950,7 +954,7 @@ TEMPLATE_MACRO_3(Document);
             {
                 tl->doc = $self;
                 tl->parent = $self;
-                $self->SBOLObjects[$self->identity.get()] = tl;
+                $self->SBOLObjects[sbol_obj->identity.get()] = tl;
                 $self->PythonObjects[sbol_obj->identity.get()] = py_obj;
                 int check = PyObject_SetAttr(py_obj, PyUnicode_FromString("thisown"), Py_False);
             }
@@ -1122,26 +1126,6 @@ TEMPLATE_MACRO_3(Document);
     }
 }
     
-%extend sbol::EnzymeCatalysisInteraction
-{
-    EnzymeCatalysisInteraction(std::string uri, ComponentDefinition& enzyme, PyObject* substrates, PyObject* products)
-    {
-        std::vector<ComponentDefinition*> substrate_v = convert_list_to_cdef_vector(substrates);
-        std::vector<ComponentDefinition*> product_v = convert_list_to_cdef_vector(products);
-        EnzymeCatalysisInteraction(uri, enzyme, substrate_v, product_v, {}, {});
-    }
-
-    
-    EnzymeCatalysisInteraction(std::string uri, ComponentDefinition& enzyme, PyObject* substrates, PyObject* products, PyObject* cofactors, PyObject* sideproducts)
-    {
-        std::vector<ComponentDefinition*> substrate_v = convert_list_to_cdef_vector(substrates);
-        std::vector<ComponentDefinition*> product_v = convert_list_to_cdef_vector(products);
-        std::vector<ComponentDefinition*> cofactor_v = convert_list_to_cdef_vector(cofactors);
-        std::vector<ComponentDefinition*> sideproduct_v = convert_list_to_cdef_vector(sideproducts);
-        EnzymeCatalysisInteraction(uri, enzyme, substrate_v, product_v, cofactor_v, sideproduct_v);
-    }
-}
-    
 %template(generateDesign) sbol::TopLevel::generate<Design>;
 %template(generateBuild) sbol::TopLevel::generate<Build>;
 %template(generateTest) sbol::TopLevel::generate<Test>;
@@ -1265,7 +1249,18 @@ from __future__ import absolute_import
                 return self.__class__.__name__
 %}
     
-
+%extend sbol::EnzymeCatalysisInteraction
+{
+    EnzymeCatalysisInteraction(std::string uri, ComponentDefinition& enzyme, PyObject* substrates, PyObject* products)
+    {
+        return new sbol::EnzymeCatalysisInteraction(uri, enzyme, convert_list_to_cdef_vector(substrates), convert_list_to_cdef_vector(products));
+    };
+    
+    EnzymeCatalysisInteraction(std::string uri, ComponentDefinition& enzyme, PyObject* substrates, PyObject* products, PyObject* cofactors, PyObject* sideproducts)
+    {
+        return new sbol::EnzymeCatalysisInteraction(uri, enzyme, convert_list_to_cdef_vector(substrates), convert_list_to_cdef_vector(products), convert_list_to_cdef_vector(cofactors), convert_list_to_cdef_vector(sideproducts));
+    };
+}
         
         //%extend sbol::Document
         //{
