@@ -3,7 +3,7 @@
 
 // For UNIX like implementation of getch (see login method)
 // this may not be portable to windows, may need conio.h
-#include <termios.h>
+// #include <termios.h>
 #include <unistd.h>
 #include <stdio.h>
 
@@ -573,32 +573,32 @@ int getch(void)
 
 void sbol::PartShop::login(std::string email, std::string password)
 {
-    if (password == "")
-    {
-        cout << "Password: ";
-        int ch;
-        while ((ch = getch()))
-        {
-            if (ch == 10 || ch == 13)
-            {
-                cout << endl;
-                break;
-            }
-            if (ch == 127 || ch == 8)
-            {
-                if (password.length() > 0)
-                {
-                    cout << "\b \b";
-                    password.erase(password.length() - 1);
-                }
-            }
-            else
-            {
-                cout << "*";
-                password += ch;
-            }
-        }
-    }
+    // if (password == "")
+    // {
+    //     cout << "Password: ";
+    //     int ch;
+    //     while ((ch = getch()))
+    //     {
+    //         if (ch == 10 || ch == 13)
+    //         {
+    //             cout << endl;
+    //             break;
+    //         }
+    //         if (ch == 127 || ch == 8)
+    //         {
+    //             if (password.length() > 0)
+    //             {
+    //                 cout << "\b \b";
+    //                 password.erase(password.length() - 1);
+    //             }
+    //         }
+    //         else
+    //         {
+    //             cout << "*";
+    //             password += ch;
+    //         }
+    //     }
+    // }
 
     /* Perform HTTP request */
     string response;
