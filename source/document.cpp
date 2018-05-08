@@ -447,10 +447,23 @@ void sbol::indent(std::string& text, int indentation)
 
 string sbol::convert_ntriples_encoding_to_ascii(string s)
 {
-    s = regex_replace(s, regex("\\\\\""), "\"");
-    s = regex_replace(s, regex("\\\\\\\\"), "\\");
-//    s = regex_replace(s, regex("\\\""), "x");
-//    s = regex_replace(s, regex("\\\\"), "\\");
+	// string original = s;
+	string::size_type n = 0;
+	string replace_token = "\\\"";
+	string replacement = "\"";
+	while ( ( n = s.find( replace_token, n ) ) != std::string::npos )
+	{
+    	s.replace( n, replace_token.size(), replacement );
+    	n += replacement.size();
+	}
+	n = 0;
+	replace_token = "\\\\";
+	replacement = "\\";
+	while ( ( n = s.find( replace_token, n ) ) != std::string::npos )
+	{
+    	s.replace( n, replace_token.size(), replacement );
+    	n += replacement.size();
+	}
     return s;
 };
 
@@ -1960,7 +1973,7 @@ std::string Document::search_metadata(std::string role, std::string type, std::s
 };
 
 
-Document& Document::copy(std::string ns, Document* doc)
+Document& Document::copy(std::string ns, Document* doc, std::string version)
 {
     if (!doc)
         doc = new Document();
@@ -1968,7 +1981,10 @@ Document& Document::copy(std::string ns, Document* doc)
     for (auto & id_and_obj_pair : SBOLObjects)
     {
         TopLevel& tl = *(TopLevel*)id_and_obj_pair.second;
-        tl.copy<TopLevel>(doc, ns, VERSION_STRING);
+        if (version == "")
+        	tl.copy<TopLevel>(doc, ns, tl.version.get());
+        else
+        	tl.copy<TopLevel>(doc, ns, VERSION_STRING);        	
     }
     return *doc;
 };

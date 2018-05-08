@@ -199,7 +199,7 @@ namespace sbol {
         /// @return A string containing a message with the validation results
         std::string validate();
         
-        Document& copy(std::string ns, Document* doc = NULL);
+        Document& copy(std::string ns, Document* doc = NULL, std::string version = "");
         
         /// Get the total number of objects in the Document, including SBOL core object and custom annotation objects
         int size()
@@ -290,7 +290,7 @@ namespace sbol {
         /// @endcond
         
         int countTriples();
-        
+
         /// @return A vector of namespaces
         /// Get namespaces contained in this Document
         std::vector<std::string> getNamespaces();
@@ -474,6 +474,7 @@ namespace sbol {
 
     /// @cond
     std::string convert_ntriples_encoding_to_ascii(std::string s);     // Convert ntriple encoding down to ascii, removing escape codes. See https://www.w3.org/TR/2004/REC-rdf-testcases-20040210/#ntrip_strings
+
 	std::string cut_sbol_resource(std::string& xml_string, const std::string resource_id);
     void replace_reference_to_resource(std::string& xml_string, const std::string property_name, const std::string resource_id, std::string& replacement_text);
 	void seek_element(std::istringstream& xml_buffer, std::string uri);
