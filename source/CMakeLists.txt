@@ -5,6 +5,7 @@ add_subdirectory( raptor )
 include_directories( ${RAPTOR_INCLUDE_DIR})
 include_directories( ${JsonCpp_INCLUDE_DIR})
 include_directories( ${CURL_INCLUDE_DIR})
+include_directories( ${OPENSSL_INCLUDE_DIR})
 if( SBOL_BUILD_PYTHON2 )
     find_package( SWIG REQUIRED )
     find_package( PythonLibs 2)
@@ -16,6 +17,9 @@ if( SBOL_BUILD_PYTHON3 )
     find_package( PythonLibs 3)
     include_directories( ${PYTHON_INCLUDE_DIR} )
     ADD_DEFINITIONS(-DSBOL_BUILD_PYTHON3)
+endif()
+if( SBOL_BUILD_MANYLINUX )
+    add_definitions(-DSBOL_BUILD_MANYLINUX)
 endif()
 
 # gather source files
@@ -225,6 +229,8 @@ else ()  # If Mac OSX or Linux
             target_link_libraries(sbol32
                 ${RAPTOR_LIBRARY}
                 ${CURL_LIBRARY}
+		${OPENSSL_LIBRARY}  # linux only
+		${CRYPTO_LIBRARY}   # linux only
                 ${LIBXSLT_LIBRARIES}
                 ${JsonCpp_LIBRARY})
             set_target_properties(sbol32 PROPERTIES
@@ -269,6 +275,8 @@ else ()  # If Mac OSX or Linux
             target_link_libraries(sbol64
                 ${RAPTOR_LIBRARY}
                 ${CURL_LIBRARY}
+		${OPENSSL_LIBRARY}  # linux only
+		${CRYPTO_LIBRARY}   # linux only
                 ${LIBXSLT_LIBRARIES}
                 ${JsonCpp_LIBRARY})
             set_target_properties(sbol64 PROPERTIES

@@ -36,7 +36,7 @@
 #include <functional>
 #include <vector>
 #include <unordered_map>
-#include <regex>
+
 #include <stdio.h>
 #include <ctype.h>
 #include <algorithm>
@@ -44,6 +44,7 @@
 #if defined(SBOL_BUILD_PYTHON2) || defined(SBOL_BUILD_PYTHON3)
 #include "Python.h"
 #endif
+
 
 using namespace sbol;
 using namespace std;
@@ -104,6 +105,7 @@ unordered_map<string, SBOLObject&(*)()> sbol::SBOL_DATA_MODEL_REGISTER =
     // Typecast proxy constructors to a constructor for SBOL
     // This makes some ugly syntax, but library users should never see it.
     make_pair(UNDEFINED, &create<SBOLObject>),
+    make_pair(SBOL_IDENTIFIED, (SBOLObject&(*)()) &create<Identified>),
     make_pair(SBOL_COMPONENT_DEFINITION, (SBOLObject&(*)()) &create<ComponentDefinition>),
     make_pair(SBOL_SEQUENCE_ANNOTATION, (SBOLObject&(*)()) &create<SequenceAnnotation>),
     make_pair(SBOL_SEQUENCE, (SBOLObject&(*)()) &create<Sequence>),
@@ -1487,8 +1489,8 @@ std::string ReferencedObject::create(std::string uri)
 Identified& Identified::copy(Document* target_doc, string ns, string version)
 {
     // Call constructor for the copy
-    Identified& new_obj = (Identified&)SBOL_DATA_MODEL_REGISTER[ this->type ]();
-    
+    Identified& new_obj = (Identified&)SBOL_DATA_MODEL_REGISTER[ SBOL_IDENTIFIED ]();
+
     // Assign the new object to the target Document (null for non-TopLevel objects)
     if (target_doc)
         new_obj.doc = target_doc;
@@ -1551,12 +1553,25 @@ Identified& Identified::copy(Document* target_doc, string ns, string version)
     }
     
     // Set version
-    new_obj.wasDerivedFrom.set(this->identity.get());
-    if (version.compare("") == 0)
-        new_obj.version.incrementMajor();
-    else
-        new_obj.version.set(version);
-    
+    if (version.compare("") != 0)  
+    	new_obj.version.set(version);
+    else if (this->version.size() > 0)  
+    	if (this->doc == target_doc)  // In order to create a copy of the object in this Document, it's version must be incremented
+        	new_obj.version.incrementMajor();
+        else
+        {
+        	new_obj.version.set(this->version.get());  // Copy this object's version if the user doesn't specify a new one
+        }
+
+    if (Config::getOption("sbol_compliant_uris") == "True")
+    	new_obj.identity.set(new_obj.persistentIdentity.get() + "/" + new_obj.version.get());
+
+    // Copy wasDerivedFrom
+    if (this->identity.get() != new_obj.identity.get())
+	    new_obj.wasDerivedFrom.set(this->identity.get());  // When generating a new object from an old, point back to the copied object
+    else if (this->wasDerivedFrom.size() > 0)
+    	new_obj.wasDerivedFrom.set(this->wasDerivedFrom.get()); // When cloning an object, don't overwrite the wasDerivedFrom
+
     for (auto i_store = owned_objects.begin(); i_store != owned_objects.end(); ++i_store)
     {
         string store_uri = i_store->first;
@@ -1981,8 +1996,10 @@ Document& Document::copy(std::string ns, Document* doc, std::string version)
     for (auto & id_and_obj_pair : SBOLObjects)
     {
         TopLevel& tl = *(TopLevel*)id_and_obj_pair.second;
-        if (version == "")
+        if (version == "" && tl.version.size() == 1)
         	tl.copy<TopLevel>(doc, ns, tl.version.get());
+        else if (version == "" && tl.version.size() == 0)
+        	tl.copy<TopLevel>(doc, ns);
         else
         	tl.copy<TopLevel>(doc, ns, VERSION_STRING);        	
     }
