@@ -33,6 +33,7 @@
 #include <json/json.h>
 #include <curl/curl.h>
 #include <unordered_map>
+#include <time.h>
 
 #if defined(SBOL_BUILD_PYTHON2) || defined(SBOL_BUILD_PYTHON3)
 #include "Python.h"
@@ -49,7 +50,7 @@ std::map<std::string, std::string> sbol::Config::options {
     {"homespace", "http://examples.org"},
     {"sbol_compliant_uris", "True"},
     {"sbol_typed_uris", "True"},
-    {"serialization_format", "rdfxml"},
+    {"serialization_format", "sbol"},
     {"validate", "True"},
     {"validator_url", "http://www.async.ece.utah.edu/validate/"},
     {"language", "SBOL2"},
@@ -72,7 +73,7 @@ std::map<std::string, std::string> sbol::Config::options {
 std::map<std::string, std::vector<std::string>> sbol::Config::valid_options {
     {"sbol_compliant_uris", {"True", "False"}},
     {"sbol_typed_uris", { "True", "False" }},
-    {"serialization_format", {"rdfxml", "json", "ntriples"}},
+    {"serialization_format", {"sbol", "rdfxml", "json", "ntriples"}},
     {"validate", { "True", "False" }},
     {"language", { "SBOL2", "FASTA", "GenBank" }},
     {"test_equality", { "True", "False" }},
@@ -344,6 +345,59 @@ void sbol::setFileFormat(std::string file_format)
 std::string sbol::getFileFormat()
 {
     return config.getFileFormat();
+};
+
+int sbol::getTime()
+{
+    time_t curtime;
+    struct tm * GMT;
+    string stamp;
+    
+    time(&curtime);
+    GMT = gmtime(&curtime);
+    curtime = mktime(GMT);
+    stamp = string(ctime(&curtime));
+    stamp.erase(stamp.length()-1, 1);
+
+    // Split date string at delimiter (adapted from C++ cookbook)
+    char delimiter = ' ';
+    vector<string> tokens;
+    string::size_type i = 0;
+    string::size_type j = stamp.find(delimiter);
+    
+    while (j != string::npos)
+    {
+        tokens.push_back(stamp.substr(i, j - i));
+        i = ++j;
+        j = stamp.find(delimiter, j);
+        if (j == string::npos)
+            tokens.push_back(stamp.substr(i, stamp.length()));
+    }
+    
+    // Format into DateTime XSD Schema
+    string month = tokens[1];
+    string day = tokens[2];
+    string t = tokens[3];
+    string yr = tokens[4];
+
+    // Split date string at delimiter (adapted from C++ cookbook)
+    delimiter = ':';
+    i = 0;
+    j = t.find(delimiter);
+    
+    while (j != string::npos)
+    {
+        tokens.push_back(t.substr(i, j - i));
+        i = ++j;
+        j = t.find(delimiter, j);
+        if (j == string::npos)
+            tokens.push_back(t.substr(i, t.length()));
+    }  
+    int hours = stoi(tokens[5]);
+    int minutes = stoi(tokens[6]);
+    int seconds = stoi(tokens[7]);
+    int total_seconds = hours*3600 + minutes*60 + seconds;
+    return total_seconds;
 };
 
 void Config::setHomespace(std::string ns)

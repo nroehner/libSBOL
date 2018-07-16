@@ -157,6 +157,8 @@ namespace sbol
         /// @return The value of the property or SBOL_ERROR_NOT_FOUND
         std::string getAnnotation(std::string property_uri);
         
+        void apply(void (*callback_fn)(SBOLObject *, void *), void * user_data);
+        
         void update_uri();
         
 #if defined(SBOL_BUILD_PYTHON2) || defined(SBOL_BUILD_PYTHON3)
@@ -166,6 +168,8 @@ namespace sbol
         
         PyObject* cast(PyObject* python_class);
 #endif
+
+        template < class SBOLClass > SBOLClass& cast();
 
         /// Use this method to destroy an SBOL object that is not contained by a parent Document.  If the object does have a parent Document, instead use doc.close() with the object's URI identity as an argument.
         /// @TODO Recurse through child objects and delete them.
@@ -187,6 +191,36 @@ namespace sbol
         };
 
     };
+
+    template <class SBOLClass>
+    SBOLClass& SBOLObject::cast()
+    {
+        SBOLClass& new_obj = *new SBOLClass();
+
+        // Set identity
+        new_obj.identity.set(this->identity.get());
+        
+        // Copy properties
+        for (auto it = this->properties.begin(); it != this->properties.end(); it++)
+        {
+            new_obj.properties[it->first] = this->properties[it->first];
+        }
+        for (auto it = this->owned_objects.begin(); it != this->owned_objects.end(); it++)
+        {
+            new_obj.owned_objects[it->first] = this->owned_objects[it->first];
+        }
+        for (auto it = this->namespaces.begin(); it != this->namespaces.end(); it++)
+        {
+            new_obj.namespaces[it->first] = this->namespaces[it->first];
+        }
+        for (auto it = this->hidden_properties.begin(); it != this->hidden_properties.end(); it++)
+        {
+            new_obj.hidden_properties.push_back(*it);
+        }
+        // new_obj->parent = this->parent;
+        // new_obj->doc = this->doc;
+        return new_obj;
+    }
 
     /// @ingroup extension_layer
     /// @brief A reference to another SBOL object

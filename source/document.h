@@ -75,7 +75,7 @@ namespace sbol {
 	public:
         /// Construct a Document.  The Document is a container for Components, Modules, and all other SBOLObjects
 		Document() :
-            Identified(SBOL_DOCUMENT, ""),
+            Identified(SBOL_DOCUMENT, "", VERSION_STRING),
             home(""),
             SBOLCompliant(0),
 			rdf_graph(raptor_new_world()),
@@ -199,7 +199,7 @@ namespace sbol {
         /// @return A string containing a message with the validation results
         std::string validate();
         
-        Document& copy(std::string ns, Document* doc = NULL, std::string version = "");
+        Document& copy(std::string ns = "", Document* doc = NULL, std::string version = "");
         
         /// Get the total number of objects in the Document, including SBOL core object and custom annotation objects
         int size()
@@ -367,16 +367,18 @@ namespace sbol {
     
 	template <class SBOLClass > void Document::add(SBOLClass& sbol_obj)
 	{
-		// Check if the uri is already assigned and delete the object, otherwise it will cause a memory leak!!!
-		//if (SBOLObjects[whatever]!=SBOLObjects.end()) {delete SBOLObjects[whatever]'}
+		// Check for uniqueness of URI
         if (this->SBOLObjects.find(sbol_obj.identity.get()) != this->SBOLObjects.end())
-            throw SBOLError(DUPLICATE_URI_ERROR, "Cannot add " + sbol_obj.identity.get() + " to Document. An object with this identity is already contained in the Document");
+        {
+            throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "Cannot add " + sbol_obj.identity.get() + " to Document. An object with this identity is already contained in the Document");
+        }
         else
         {
             // If TopLevel add to Document.
+            if (dynamic_cast<TopLevel*>(&sbol_obj))
+                SBOLObjects[sbol_obj.identity.get()] = (SBOLObject*)&sbol_obj;
             if (owned_objects.find(sbol_obj.type) != owned_objects.end())
             {
-                SBOLObjects[sbol_obj.identity.get()] = (SBOLObject*)&sbol_obj;
                 sbol_obj.parent = this;  // Set back-pointer to parent object
                 this->owned_objects[sbol_obj.getTypeURI()].push_back((SBOLClass*)&sbol_obj);  // Add the object to the Document's property store, eg, componentDefinitions, moduleDefinitions, etc.
             }
@@ -387,7 +389,13 @@ namespace sbol {
                 std::vector<SBOLObject*>& object_store = i_store->second;
                 for (auto i_obj = object_store.begin(); i_obj != object_store.end(); ++i_obj)
                 {
-                    this->add<SBOLObject>(**i_obj);
+                    SBOLObject& owned_obj = **i_obj;
+                    // // This check for URI duplication adds an inefficiency but is a necessary kludge to accommodate the OwnedObject<TopLevel> pattern
+                    // if (this->SBOLObjects.find(owned_obj.identity.get()) == this->SBOLObjects.end()) 
+                    if (owned_obj.doc != this)
+                    {
+                        this->add<SBOLObject>(**i_obj);
+                    }
                 }
             }
         }
@@ -402,11 +410,11 @@ namespace sbol {
         }
     };
     
-    template<>
-    Design& Document::get<Design>(std::string uri);  // Definition is in dbtl.cpp
+    // template<>
+    // Design& Document::get<Design>(std::string uri);  // Definition is in dbtl.cpp
     
-    template<>
-    Build& Document::get<Build>(std::string uri);  // Definition is in dbtl.cpp
+    // template<>
+    // Build& Document::get<Build>(std::string uri);  // Definition is in dbtl.cpp
     
 	template <class SBOLClass > SBOLClass& Document::get(std::string uri)
 	{
@@ -719,7 +727,11 @@ namespace sbol {
         if (check_top_level && this->sbol_owner->doc)
         {
             Document& doc = (Document &)*this->sbol_owner->doc;
-            doc.add<SBOLClass>(sbol_obj);
+            if (this->isHidden() && doc.find(sbol_obj.identity.get())) // In order to avoid a duplicate URI error, don't attempt to add the object if this is a hidden property, 
+            {
+            }
+            else
+                doc.add<SBOLClass>(sbol_obj);
         }
         
         // Add to parent object
@@ -1406,7 +1418,6 @@ namespace sbol {
     {
         if (this->sbol_owner)
         {
-
             if (this->sbol_owner->owned_objects.find(this->type) != this->sbol_owner->owned_objects.end())
             {
                 std::vector<SBOLObject*>& object_store = this->sbol_owner->owned_objects[this->type];
@@ -1425,7 +1436,8 @@ namespace sbol {
                         // Erase nested, hidden TopLevel objects from Document
                         if (obj->doc && !obj->doc->find(uri))
                             obj->doc = NULL;
-                        SBOLClass* cast_obj = dynamic_cast<SBOLClass*>(cast_obj);
+
+                        SBOLClass* cast_obj = dynamic_cast<SBOLClass*>(obj);
                         return *cast_obj;
                     }
                 }
@@ -1491,9 +1503,29 @@ namespace sbol {
         if (!target_doc)
             target_doc = this->doc;
         Identified& obj_copy = Identified::copy(target_doc, ns, version);
-        SBOLClass& new_obj = (SBOLClass&)obj_copy;
-        if (target_doc)
-            target_doc->add < SBOLClass > (new_obj);
+        SBOLObject* p_new_obj;
+        if (SBOL_DATA_MODEL_REGISTER.find(obj_copy.type) != SBOL_DATA_MODEL_REGISTER.end())
+            p_new_obj = &(SBOLObject&)obj_copy;
+        else
+        {            
+            p_new_obj = &(SBOLObject&)obj_copy. template cast<TopLevel>();
+            obj_copy.close();
+        }
+
+        SBOLClass& new_obj = *(SBOLClass*)p_new_obj;
+        try
+        {
+            if (target_doc)
+                target_doc->add < SBOLClass > (new_obj);            
+        }
+        catch(SBOLError &e)
+        {
+            if (e.error_code() == SBOL_ERROR_URI_NOT_UNIQUE)
+            {
+                new_obj.close();
+            }
+            throw SBOLError(e.error_code(), e.what());
+        }        
         return new_obj;
     };
 
