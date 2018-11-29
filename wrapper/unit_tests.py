@@ -144,8 +144,8 @@ class TestRoundTripSBOL2(unittest.TestCase):
 	def test_case021(self):
 		self.run_round_trip(str(TEST_FILES_SBOL2[21]))
 
-        def test_case022(self):
-                self.run_round_trip(str(TEST_FILES_SBOL2[22]))
+	def test_case022(self):
+		self.run_round_trip(str(TEST_FILES_SBOL2[22]))
 
 	def test_case023(self):
 		self.run_round_trip(str(TEST_FILES_SBOL2[23]))
@@ -637,6 +637,32 @@ class TestAssemblyRoutines(unittest.TestCase):
 
 		self.assertEquals(target_seq, 'atactagagttactagctactagagg')
 
+	def testApplyCallbackRecursively(self):
+		# Assemble module hierarchy
+		doc = Document()
+		root = ModuleDefinition('root')
+		sub = ModuleDefinition('sub')
+		leaf = ModuleDefinition('leaf')
+		doc.addModuleDefinition([root, sub, leaf])
+		root.assemble([sub])
+		sub.assemble([leaf])
+
+		# Define callback which performs an operation on the given ModuleDefinition
+		def callback(md, params):
+			level = params[0]
+			level += 1
+			params[0] = level
+
+		# Apply callback
+		level = 0
+		params = [ level ]
+		flattened_module_tree = root.applyToModuleHierarchy(callback, params)
+		level = params[0]
+		flattened_module_tree = [md.identity for md in flattened_module_tree]
+		expected_module_tree = [md.identity for md in [root, sub, leaf]]
+		self.assertItemsEqual(flattened_module_tree, expected_module_tree)
+		self.assertEquals(level, 3)
+
 class TestSequences(unittest.TestCase):
 
 	def setUp(self):
@@ -706,10 +732,10 @@ class TestExtensionClass(unittest.TestCase):
 
 	def testExtensionClass(self):
 		class ModuleDefinitionExtension(ModuleDefinition):
-		    def __init__(self, id = 'example'):
-		        ModuleDefinition.__init__(self, id)
-		        self.x_coordinate = TextProperty(self.this, 'http://dnaplotlib.org#xCoordinate', '0', '1', '10')  # Initialize property value to 10
-		        self.y_coordinate = IntProperty(self.this, 'http://dnaplotlib.org#yCoordinate', '0', '1', 10)  # Initialize property value to 10
+			def __init__(self, id = 'example'):
+				ModuleDefinition.__init__(self, id)
+				self.x_coordinate = TextProperty(self.this, 'http://dnaplotlib.org#xCoordinate', '0', '1', '10')  # Initialize property value to 10
+				self.y_coordinate = IntProperty(self.this, 'http://dnaplotlib.org#yCoordinate', '0', '1', 10)  # Initialize property value to 10
 
 		doc = Document()
 		doc.addNamespace('http://dnaplotlib.org#', 'dnaplotlib')
@@ -735,6 +761,7 @@ class TestIterators(unittest.TestCase):
 		for i_cd in range(0, 10):
 			cd = doc.componentDefinitions.create('cd%d' %i_cd)
 			cds.append(cd.identity)
+			self.assertEquals(cd.displayId, 'cd%d' %i_cd)  # Verify TopLevel properties are accessible
 		i_cd = 0
 		for obj in doc:
 			cds.remove(obj.identity)
