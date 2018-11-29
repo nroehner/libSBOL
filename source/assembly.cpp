@@ -228,7 +228,7 @@ std::string ComponentDefinition::updateSequence(std::string composite_sequence)
 //    assemble(list_of_components, doc);
 //}
 
-void ComponentDefinition::assemble(vector<string> list_of_uris)
+void ComponentDefinition::assemble(vector<string>& list_of_uris, string assembly_standard)
 {
     if (Config::getOption("sbol_compliant_uris").compare("False") == 0)
         throw SBOLError(SBOL_ERROR_COMPLIANCE, "Assemble methods require SBOL-compliance enabled");
@@ -246,27 +246,38 @@ void ComponentDefinition::assemble(vector<string> list_of_uris)
     assemble(list_of_components);
 }
 
-void ComponentDefinition::assemblePrimaryStructure(vector<string> primary_structure)
+void ComponentDefinition::assemblePrimaryStructure(vector<string>& primary_structure, string assembly_standard)
 {
-    assemble(primary_structure);
+    if (Config::getOption("sbol_compliant_uris").compare("False") == 0)
+        throw SBOLError(SBOL_ERROR_COMPLIANCE, "Assemble methods require SBOL-compliance enabled");
+    if (doc == NULL)
+    {
+        throw SBOLError(SBOL_ERROR_MISSING_DOCUMENT, "Cannot perform assembly operation on ComponentDefinition because it does not belong to a Document. You may pass a Document as an optional second argument to this method. Otherwise add this ComponentDefinition to a Document");
+    }
+    ComponentDefinition& parent_component = *this;
+    std::vector<ComponentDefinition*> list_of_components;
+    for (auto & uri : primary_structure)
+    {
+        ComponentDefinition& cdef = doc->componentDefinitions.get(uri);
+        list_of_components.push_back(&cdef);
+    }
+    assemblePrimaryStructure(list_of_components, assembly_standard);
+};
+
+void ComponentDefinition::assemblePrimaryStructure(vector<ComponentDefinition*>& primary_structure, string assembly_standard)
+{
+    assemble(primary_structure, assembly_standard);
     linearize(primary_structure);
 };
 
-void ComponentDefinition::assemblePrimaryStructure(vector<ComponentDefinition*> primary_structure)
+void ComponentDefinition::assemblePrimaryStructure(vector<ComponentDefinition*>& primary_structure, Document& doc, string assembly_standard)
 {
-    assemble(primary_structure);
+    assemble(primary_structure, doc, assembly_standard);
     linearize(primary_structure);
 };
-
-void ComponentDefinition::assemblePrimaryStructure(vector<ComponentDefinition*> primary_structure, Document& doc)
-{
-    assemble(primary_structure, doc);
-    linearize(primary_structure);
-};
-
 
 /// @TODO update SequenceAnnotation starts and ends
-void ComponentDefinition::assemble(vector<ComponentDefinition*> list_of_components, Document& doc)
+void ComponentDefinition::assemble(vector<ComponentDefinition*>& list_of_components, Document& doc, string assembly_standard)
 {
     if (Config::getOption("sbol_compliant_uris").compare("False") == 0)
         throw SBOLError(SBOL_ERROR_COMPLIANCE, "Assemble methods require SBOL-compliance enabled");
@@ -274,7 +285,50 @@ void ComponentDefinition::assemble(vector<ComponentDefinition*> list_of_componen
     ComponentDefinition& parent_component = *this;
     if (parent_component.doc == NULL)
         doc.add<ComponentDefinition>(parent_component);
-        
+    
+    if (assembly_standard == IGEM_STANDARD_ASSEMBLY)
+    {
+        ComponentDefinition* scar;
+        ComponentDefinition* alternate_scar;
+        ComponentDefinition* scar_instance;
+        try
+        {
+            scar = &doc.componentDefinitions.create("scar");
+            Sequence* scar_seq = &doc.sequences.create("scar_seq");
+            scar_seq->elements.set("tactagag");
+            scar->sequences.set(scar_seq->identity.get());
+        }
+        catch(SBOLError& e)
+        {
+            scar = &doc.componentDefinitions["scar"];
+        }
+        try
+        {
+            alternate_scar = &doc.componentDefinitions.create("alternate_scar");
+            Sequence* alternate_scar_seq = &doc.sequences.create("alternate_scar_seq");
+            alternate_scar_seq->elements.set("tactag");
+            alternate_scar->sequences.set(alternate_scar_seq->identity.get());
+        }
+        catch(SBOLError& e)
+        {
+            alternate_scar = &doc.componentDefinitions["alternate_scar"];
+        }
+        vector<ComponentDefinition*> temp_list_of_components = list_of_components;
+        list_of_components.clear();
+        for (int i = 0; i < (temp_list_of_components.size() - 1); ++i)
+        {
+            ComponentDefinition& cd_upstream = *temp_list_of_components[i];
+            ComponentDefinition& cd_downstream = *temp_list_of_components[i+1];
+            if (cd_upstream.roles.size() && cd_downstream.roles.size() && cd_upstream.roles.get() == SO_RBS && cd_downstream.roles.get() == SO_CDS)
+                scar_instance = alternate_scar;
+            else
+                scar_instance = scar;
+            list_of_components.push_back(&cd_upstream);
+            list_of_components.push_back(scar_instance);
+        }
+        list_of_components.push_back(temp_list_of_components[temp_list_of_components.size() - 1]);
+    }
+
     vector<Component*> list_of_instances = {};
     for (auto i_com = 0; i_com != list_of_components.size(); i_com++)
     {
@@ -308,14 +362,14 @@ void ComponentDefinition::assemble(vector<ComponentDefinition*> list_of_componen
 }
 
 
-void ComponentDefinition::assemble(vector<ComponentDefinition*> list_of_components)
+void ComponentDefinition::assemble(vector<ComponentDefinition*>& list_of_components, string assembly_standard)
 {
     // Throw an error if this ComponentDefinition is not attached to a Document
     if (doc == NULL)
     {
         throw SBOLError(SBOL_ERROR_MISSING_DOCUMENT, "Cannot perform assembly operation on ComponentDefinition because it does not belong to a Document.");
     }
-    assemble(list_of_components, *doc);
+    assemble(list_of_components, *doc, assembly_standard);
 }
 
 std::string Sequence::compile()
@@ -331,16 +385,19 @@ std::string ComponentDefinition::compile()
         throw SBOLError(SBOL_ERROR_MISSING_DOCUMENT, "Cannot perform compile operation on ComponentDefinition because it does not belong to a Document.");
     }
     Sequence* seq;
-    if (sequence.size() == 0)
+    if (sequences.size() == 0)
     {
         if (Config::getOption("sbol_compliant_uris") == "True")
         {
             seq = &doc->sequences.create(displayId.get());
             sequence.set(*seq);
+            sequences.set(seq->identity.get());
+
         } else
         {
             seq = &doc->sequences.create(identity.get() + "_seq");
             sequence.set(*seq);
+            sequences.set(seq->identity.get());
         }
     }
     else 
@@ -458,11 +515,26 @@ string Sequence::assemble(string composite_sequence)
     else if (parent_component.components.size() > 1)
     {
         // Recurse into subcomponents and assemble their sequence
+        size_t composite_sequence_initial_size = composite_sequence.size();
         vector<Component*> subcomponents = parent_component.getInSequentialOrder();
         for (auto i_c = subcomponents.begin(); i_c != subcomponents.end(); i_c++)
         {
             Component& c = **i_c;
             ComponentDefinition& cdef = doc->get < ComponentDefinition > (c.definition.get());
+            if (cdef.sequences.size() == 0)
+            {
+                if (Config::getOption("sbol_compliant_uris") == "True")
+                {
+                    Sequence& seq = doc->sequences.create(cdef.displayId.get());
+                    cdef.sequence.set(seq);
+                    cdef.sequences.set(seq.identity.get());
+                } else
+                {
+                    Sequence& seq = doc->sequences.create(cdef.identity.get() + "_seq");
+                    cdef.sequence.set(seq);
+                    cdef.sequences.set(seq.identity.get());
+                }
+            }
             Sequence& seq = doc->get < Sequence > (cdef.sequences.get());
             
             // Check for regularity -- only one SequenceAnnotation per Component is allowed
@@ -474,13 +546,28 @@ string Sequence::assemble(string composite_sequence)
             if (sequence_annotations.size() == 0)
             {
                 string sa_id;
+                int sa_instance = 0;
                 if (Config::getOption("sbol_compliant_uris") == "True")
                     sa_id = cdef.displayId.get();
                 else
                     sa_id = cdef.identity.get();
-                SequenceAnnotation& sa = parent_component.sequenceAnnotations.create<SequenceAnnotation>(sa_id + "_annotation");
-                sa.component.set(c);
-                sequence_annotations.push_back((SBOLObject*)&sa);
+                SequenceAnnotation* sa = NULL;
+                while (sa == NULL)
+                {
+                    try
+                    {
+                        sa = &parent_component.sequenceAnnotations.create<SequenceAnnotation>(sa_id + "_annotation_" + to_string(sa_instance));
+                    }
+                    catch(SBOLError& e)
+                    {
+                        if (e.error_code() == SBOL_ERROR_URI_NOT_UNIQUE)
+                            ++sa_instance;
+                        else
+                            throw SBOLError(e.error_code(), e.what());
+                    }
+                }
+                sa->component.set(c);
+                sequence_annotations.push_back((SBOLObject*)sa);
             }
             SequenceAnnotation& sa = *(SequenceAnnotation*)sequence_annotations[0];
             
@@ -512,18 +599,22 @@ string Sequence::assemble(string composite_sequence)
             r.start.set((int)composite_sequence.size() + 1);
                                 
             composite_sequence = composite_sequence + seq.assemble(composite_sequence);  // Recursive call
+            //composite_sequence = composite_sequence + seq.assemble();  // Recursive call
                                 
             r.end.set((int)composite_sequence.size());
         }
-                                
-        elements.set(composite_sequence);
-        return composite_sequence;
+        string subsequence = composite_sequence.substr(composite_sequence_initial_size, composite_sequence.size());                        
+        elements.set(subsequence);
+        return subsequence;
     }
     else
     {
         std::string parent_component_seq = parent_component.sequences.get();
         Sequence& seq = doc->get < Sequence >(parent_component.sequences.get());
-        return seq.elements.get();
+        if (seq.elements.size() == 0)
+            return "";
+        else
+            return seq.elements.get();
     }
 };
 
@@ -2293,7 +2384,7 @@ void ComponentDefinition::linearize(std::vector<ComponentDefinition*> primary_st
     }
     if (components.size() != primary_structure.size())
     {
-        throw SBOLError(SBOL_ERROR_INVALID_ARGUMENT, "Invalid primary structure provided. This ComponentDefinition must contain a number of Components corresponding to the length of the primary structure");
+        // throw SBOLError(SBOL_ERROR_INVALID_ARGUMENT, "Invalid primary structure provided. This ComponentDefinition must contain a number of Components corresponding to the length of the primary structure");
     }
     if (sequenceConstraints.size())
     {

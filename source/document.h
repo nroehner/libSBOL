@@ -103,6 +103,8 @@ namespace sbol {
                 namespaces["dcterms"] = PURL_URI;
                 namespaces["prov"] = PROV_URI "#";
                 namespaces["sys-bio"] = SYSBIO_URI "#";
+                for (auto & ns : Config::extension_namespaces)
+                    namespaces[ns.first] = ns.second;
                 doc = this;
 			};
         
@@ -117,6 +119,7 @@ namespace sbol {
         /// @cond
         /// The Document's register of objects
 		std::unordered_map<std::string, sbol::SBOLObject*> SBOLObjects;
+        std::map<std::string, sbol::SBOLObject*> objectCache;
         
         TopLevel& getTopLevel(std::string);
         raptor_world* getWorld();
@@ -191,9 +194,13 @@ namespace sbol {
         std::string query_repository(std::string command);
 
         std::string search_metadata(std::string role, std::string type, std::string name, std::string collection);
-        
+
+        static std::string string_from_raptor_term(raptor_term *term, bool addWrapper=false);
+
 		/// Generates rdf/xml
         void generate(raptor_world** world, raptor_serializer** sbol_serializer, char** sbol_buffer, size_t* sbol_buffer_len, raptor_iostream** ios, raptor_uri** base_uri);
+
+        void serialize_rdfxml(std::ostream &os);
 
         /// Run validation on this Document via the online validation tool.
         /// @return A string containing a message with the validation results
@@ -221,7 +228,40 @@ namespace sbol {
         };
 
 #endif
-        
+        void cacheObjects();
+
+        std::string referenceNamespace(const std::string uri) const {
+            std::string newURI = uri;
+
+            if(default_namespace.size() > 0) {
+                std::string::size_type pos = newURI.find(default_namespace);
+
+                if(pos != std::string::npos)
+                {
+                    newURI = newURI.replace(pos, default_namespace.size(),
+                                            "");
+                    return newURI;
+                }
+            }
+
+            for(auto nsPair : namespaces)
+            {
+                std::string::size_type pos = newURI.find(nsPair.second);
+                if(pos == std::string::npos)
+                {
+                    continue;
+                }
+
+                newURI = newURI.replace(pos, nsPair.second.size(),
+                                        nsPair.first + ":");
+
+                // Assume only one namespace per URI
+                break;
+            }
+
+            return newURI;
+        }
+
         /// Get a summary of objects in the Document, including SBOL core object and custom annotation objects
         std::string summary()
         {
@@ -283,7 +323,14 @@ namespace sbol {
         static void count_triples(void *user_data, raptor_statement* triple);
         void addNamespace(std::string ns, std::string prefix, raptor_serializer* sbol_serializer);
         void parse_annotation_objects();
-        void parse_extension_objects();
+        void dress_document();
+
+        void parse_objects_inner(const std::string &subject,
+                                 const std::string &object);
+
+        void parse_properties_inner(const std::string &subject,
+                                    const std::string &predicate,
+                                    const std::string &object);
 
         SBOLObject* find_property(std::string uri);
         std::vector<SBOLObject*> find_reference(std::string uri);
@@ -578,9 +625,9 @@ namespace sbol {
             
             // Check for uniqueness of URI in the Document
             if (parent_doc && parent_doc->find(child_id))
-                throw SBOLError(DUPLICATE_URI_ERROR, "An object with URI " + child_id + " is already in the Document");
+                throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "An object with URI " + child_id + " is already in the Document");
             if (this->find(child_id))
-                throw SBOLError(DUPLICATE_URI_ERROR, "An object with URI " + child_id + " is already in the " + this->type + " property");
+                throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "An object with URI " + child_id + " is already in the " + this->type + " property");
             
             // Initialize SBOLCompliant properties
             child_obj->identity.set(child_id);
@@ -606,7 +653,7 @@ namespace sbol {
         else
         {
             if (parent_doc && parent_doc->find(uri))
-                throw SBOLError(DUPLICATE_URI_ERROR, "An object with URI " + uri + " is already in the Document");
+                throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "An object with URI " + uri + " is already in the Document");
             
             // Construct a new child object
             //SBOLClass* child_obj = new SBOLClass(uri);
@@ -669,9 +716,9 @@ namespace sbol {
             
             // Check for uniqueness of URI in the Document
             if (parent_doc && parent_doc->find(child_id))
-                throw SBOLError(DUPLICATE_URI_ERROR, "An object with URI " + child_id + " is already in the Document");
+                throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "An object with URI " + child_id + " is already in the Document");
             if (this->find(child_id))
-                throw SBOLError(DUPLICATE_URI_ERROR, "An object with URI " + child_id + " is already in the " + this->type + " property");
+                throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "An object with URI " + child_id + " is already in the " + this->type + " property");
 
             // Construct a new child object
             SBOLSubClass* child_obj = new SBOLSubClass();
@@ -700,7 +747,7 @@ namespace sbol {
         else
         {
             if (parent_doc && parent_doc->find(uri))
-                throw SBOLError(DUPLICATE_URI_ERROR, "An object with URI " + uri + " is already in the Document");
+                throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "An object with URI " + uri + " is already in the Document");
             
             // Construct an SBOLObject with emplacement
             SBOLSubClass* child_obj = new SBOLSubClass(uri);
@@ -727,18 +774,24 @@ namespace sbol {
         if (check_top_level && this->sbol_owner->doc)
         {
             Document& doc = (Document &)*this->sbol_owner->doc;
-            if (this->isHidden() && doc.find(sbol_obj.identity.get())) // In order to avoid a duplicate URI error, don't attempt to add the object if this is a hidden property, 
+            if (this->isHidden() && doc.find(sbol_obj.identity.get())) // In order to avoid a duplicate URI error, don't attempt to add the object if this is a hidden property,
             {
             }
             else
                 doc.add<SBOLClass>(sbol_obj);
         }
-        
+
+        set_notoplevelcheck(sbol_obj);
+    };
+
+    template < class SBOLClass>
+    void OwnedObject<SBOLClass>::set_notoplevelcheck(SBOLClass& sbol_obj)
+    {
         // Add to parent object
         if (!this->sbol_owner->owned_objects[this->type].size())
             this->sbol_owner->owned_objects[this->type].push_back((SBOLObject *)&sbol_obj);
         else
-            throw SBOLError(SBOL_ERROR_INVALID_ARGUMENT, "This property is already set. Call remove before attempting to overwrite the value.");
+            throw SBOLError(SBOL_ERROR_INVALID_ARGUMENT, "Cannot set " + parsePropertyName(this->type) + " property. The property is already set. Call remove before attempting to overwrite the value.");
         sbol_obj.parent = this->sbol_owner;  // Set back-pointer to parent object
         
         // Update URI for the argument object and all its children, if SBOL-compliance is enabled.
@@ -763,7 +816,7 @@ namespace sbol {
             {
                 std::vector< sbol::SBOLObject* >& object_store = this->sbol_owner->owned_objects[this->type];
                 if (std::find(object_store.begin(), object_store.end(), &sbol_obj) != object_store.end())
-                    throw SBOLError(DUPLICATE_URI_ERROR, "The object " + sbol_obj.identity.get() + " is already contained by the " + this->type + " property");
+                    throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "The object " + sbol_obj.identity.get() + " is already contained by the " + this->type + " property");
 
                 // Add to Document and check for uniqueness of URI
                 if (this->sbol_owner->doc)
@@ -1113,7 +1166,7 @@ namespace sbol {
                 {
                     std::vector< sbol::SBOLObject* >& object_store = this->sbol_owner->owned_objects[this->type];
                     if (std::find(object_store.begin(), object_store.end(), sbol_obj) != object_store.end())
-                        throw SBOLError(DUPLICATE_URI_ERROR, "The object " + sbol_obj->identity.get() + " is already contained by the property");
+                        throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "The object " + sbol_obj->identity.get() + " is already contained by the property");
                     else
                     {
                         sbol_obj->parent = this->sbol_owner;  // Set back-pointer to parent object
@@ -1264,7 +1317,7 @@ namespace sbol {
                 
                 // Check for uniqueness of URI in the Document
                 if (parent_doc && parent_doc->find(child_id))
-                    throw SBOLError(DUPLICATE_URI_ERROR, "An object with URI " + child_id + " is already in the Document");
+                    throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "An object with URI " + child_id + " is already in the Document");
                 
                 // Construct a new child object
                 //            SBOLClass* child_obj = new SBOLClass(uri);
@@ -1294,7 +1347,7 @@ namespace sbol {
             else
             {
                 if (parent_doc && parent_doc->find(uri))
-                    throw SBOLError(DUPLICATE_URI_ERROR, "An object with URI " + uri + " is already in the Document");
+                    throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "An object with URI " + uri + " is already in the Document");
                 
                 // Construct a new child object
                 PyObject* py_obj = PyObject_CallObject(constructor_for_owned_object, NULL);
@@ -1525,7 +1578,7 @@ namespace sbol {
                 new_obj.close();
             }
             throw SBOLError(e.error_code(), e.what());
-        }        
+        }
         return new_obj;
     };
 
@@ -1570,7 +1623,7 @@ namespace sbol {
         
         // Check for uniqueness of URI in the Document
         if (doc && doc->find(new_obj.identity.get()))
-            throw SBOLError(DUPLICATE_URI_ERROR, "Cannot generate " + uri + ". An object with that URI is already in the Document");
+            throw SBOLError(SBOL_ERROR_URI_NOT_UNIQUE, "Cannot generate " + uri + ". An object with that URI is already in the Document");
         doc->add<SBOLClass>(new_obj);
         
         std::string id;

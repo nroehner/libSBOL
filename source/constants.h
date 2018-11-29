@@ -118,7 +118,7 @@
 #define SBOL_MEMBERS SBOL_URI "#member"
 #define SBOL_AT SBOL_URI "#at"
 #define SBOL_OPERATOR SBOL_URI "#operator"
-#define SBOL_VARIABLE_COMPONENTS SBOL_URI "#variableComponents"
+#define SBOL_VARIABLE_COMPONENTS SBOL_URI "#variableComponent"
 #define SBOL_VARIABLE SBOL_URI "#variable"
 #define SBOL_VARIANTS SBOL_URI "#variants"
 #define SBOL_VARIANT_COLLECTIONS SBOL_URI "#variantCollections"
@@ -242,4 +242,6 @@
 #define SYSBIO_ANALYSIS SYSBIO_URI "#Analysis"
 #define SYSBIO_SAMPLE_ROSTER SYSBIO_URI "#SampleRoster"
 
+#define IGEM_URI "http://wiki.synbiohub.org/wiki/Terms/igem"
+#define IGEM_STANDARD_ASSEMBLY IGEM_URI "#assembly/RFC10"
 #endif

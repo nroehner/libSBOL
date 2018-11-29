@@ -50,7 +50,7 @@ namespace sbol
         /// @param uri A full URI including a scheme, namespace, and identifier.  If SBOLCompliance configuration is enabled, then this argument is simply the displayId for the new object and a full URI will automatically be constructed.
         /// @param type A BioPAX ontology term that indicates whether the ComponentDefinition is DNA, RNA, protein, or some other molecule type.
         /// @param version An arbitrary version string. If SBOLCompliance is enabled, this should be a Maven version string of the form "major.minor.patch".
-        ComponentDefinition(std::string uri = "example", std::string type = BIOPAX_DNA, std::string version = "1.0.0") : ComponentDefinition(SBOL_COMPONENT_DEFINITION, uri, type, version) {};
+        ComponentDefinition(std::string uri = "example", std::string type = BIOPAX_DNA, std::string version = VERSION_STRING) : ComponentDefinition(SBOL_COMPONENT_DEFINITION, uri, type, version) {};
 
         /// Constructor used for defining extension classes
         /// @param type The RDF type for an extension class derived from this one
@@ -109,29 +109,35 @@ namespace sbol
         
         /// Assembles ComponentDefinitions into an abstraction hierarchy. The resulting data structure is a partial design, still lacking a primary structure or explicit sequence. To form a primary structure out of the ComponentDefinitions, call linearize after calling assemble. To fully realize the target sequence, use Sequence::assemble().
         /// @param list_of_components A list of subcomponents that will compose this ComponentDefinition
-        void assemble(std::vector<ComponentDefinition*> list_of_components);
+        /// @param assembly_standard An optional argument such as IGEM_STANDARD_ASSEMBLY that affects how components are composed and the final target sequence
+        void assemble(std::vector<ComponentDefinition*>& list_of_components, std::string assembly_standard = "");
 
         /// Assembles ComponentDefinitions into an abstraction hierarchy. The resulting data structure is a partial design, still lacking a primary structure or explicit sequence. To form a primary structure out of the ComponentDefinitions, call linearize after calling assemble. To fully realize the target sequence, use Sequence::assemble().
         /// @param list_of_components A list of subcomponents that will compose this ComponentDefinition
         /// @param doc The Document to which the assembled ComponentDefinitions will be added
-        void assemble(std::vector<ComponentDefinition*> list_of_components, Document& doc);
+        /// @param assembly_standard An optional argument such as IGEM_STANDARD_ASSEMBLY that affects how components are composed and the final target sequence
+        void assemble(std::vector<ComponentDefinition*>& list_of_components, Document& doc, std::string assembly_standard = "");
 
         /// Assembles ComponentDefinition into a linear primary structure. The resulting data structure is a partial design, still lacking an explicit sequence. To fully realize the target sequence, use Sequence::assemble().
         /// @param primary_structure A list of URIs for the constituent ComponentDefinitions, or displayIds if using SBOL-compliant URIs
-        void assemblePrimaryStructure(std::vector<std::string> primary_structure);
+        /// @param assembly_standard An optional argument such as IGEM_STANDARD_ASSEMBLY that affects how components are composed and the final target sequence
+        void assemblePrimaryStructure(std::vector<std::string>& primary_structure, std::string assembly_standard = "");
         
         /// Assembles ComponentDefinition into a linear primary structure. The resulting data structure is a partial design, still lacking an explicit sequence. To fully realize the target sequence, use Sequence::assemble().
         /// @param list_of_components A list of subcomponents that will compose this ComponentDefinition
-        void assemblePrimaryStructure(std::vector<ComponentDefinition*> primary_structure);
+        /// @param assembly_standard An optional argument such as IGEM_STANDARD_ASSEMBLY that affects how components are composed and the final target sequence
+        void assemblePrimaryStructure(std::vector<ComponentDefinition*>& primary_structure, std::string assembly_standard = "");
         
         /// Assembles ComponentDefinition into a linear primary structure. The resulting data structure is a partial design, still lacking an explicit sequence. To fully realize the target sequence, use Sequence::assemble().
         /// @param list_of_components A list of subcomponents that will compose this ComponentDefinition
         /// @param doc The Document to which the assembled ComponentDefinitions will be added
-        void assemblePrimaryStructure(std::vector<ComponentDefinition*> primary_structure, Document& doc);
+        /// @param assembly_standard An optional argument such as IGEM_STANDARD_ASSEMBLY that affects how components are composed and the final target sequence
+        void assemblePrimaryStructure(std::vector<ComponentDefinition*>& primary_structure, Document& doc, std::string assembly_standard = "");
 
         /// Assembles ComponentDefinitions into an abstraction hierarchy. The resulting data structure is a partial design, still lacking a primary structure or explicit sequence. To form a primary structure out of the ComponentDefinitions, call linearize after calling assemble. To fully realize the target sequence, use Sequence::assemble().
         /// @param list_of_uris A list of URIs for the constituent ComponentDefinitions, or displayIds if using SBOL-compliant URIs
-        void assemble(std::vector<std::string> list_of_uris);
+        /// @param assembly_standard An optional argument such as IGEM_STANDARD_ASSEMBLY that affects how components are composed and the final target sequence
+        void assemble(std::vector<std::string>& list_of_uris, std::string assembly_standard = "");
 
         /// Compiles an abstraction hierarchy of ComponentDefinitions into a nucleotide sequence. If no Sequence object is associated with this ComponentDefinition, one will be automatically instantiated
         std::string compile();

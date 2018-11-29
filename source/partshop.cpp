@@ -3,8 +3,13 @@
 
 // For UNIX like implementation of getch (see login method)
 // this may not be portable to windows, may need conio.h
-// #include <termios.h>
+#ifndef SBOL_WIN
+#include <termios.h>
 #include <unistd.h>
+#else
+#include <conio.h>
+#endif
+
 #include <stdio.h>
 
 using namespace std;
@@ -217,7 +222,7 @@ SearchResponse& sbol::PartShop::search(std::string search_text, rdf_type object_
         res = curl_easy_perform(curl);
         /* Check for errors */
         if(res != CURLE_OK)
-            throw SBOLError(SBOL_ERROR_BAD_HTTP_REQUEST, "Attempt to validate online failed with " + string(curl_easy_strerror(res)));
+            throw SBOLError(SBOL_ERROR_BAD_HTTP_REQUEST, "Search failed with: " + string(curl_easy_strerror(res)));
         
         /* always cleanup */
         curl_easy_cleanup(curl);
@@ -556,6 +561,7 @@ int sbol::PartShop::searchCount(std::string search_text, rdf_type object_type)
 };
 
 
+#ifndef SBOL_WIN
 // Unix-like implementation of getch, might not be portable to Windows
 /* reads from keypress, doesn't echo */
 int getch(void)
@@ -570,6 +576,7 @@ int getch(void)
     tcsetattr( STDIN_FILENO, TCSANOW, &oldattr );
     return ch;
 }
+#endif
 
 void sbol::PartShop::login(std::string email, std::string password)
 {
@@ -714,6 +721,7 @@ std::string sbol::PartShop::submit(Document& doc, std::string collection, int ov
         curl_formadd(&post, &last, CURLFORM_COPYNAME, "overwrite_merge", CURLFORM_COPYCONTENTS, std::to_string(overwrite).c_str(), CURLFORM_END);
         curl_formadd(&post, &last, CURLFORM_COPYNAME, "user", CURLFORM_COPYCONTENTS, key.c_str(), CURLFORM_END);
         curl_formadd(&post, &last, CURLFORM_COPYNAME, "file", CURLFORM_COPYCONTENTS, doc.writeString().c_str(), CURLFORM_CONTENTTYPE, "text/xml", CURLFORM_END);
+
         if (collection != "")
             curl_formadd(&post, &last, CURLFORM_COPYNAME, "rootCollections", CURLFORM_COPYCONTENTS, collection.c_str());
         
@@ -752,9 +760,13 @@ std::string sbol::PartShop::submit(Document& doc, std::string collection, int ov
         t_end = getTime();
         cout << "Submission request took " << t_end - t_start << " seconds" << endl;
     }
-    if (http_response_code == 401)
+
+    if (http_response_code == 200)
+        return response;
+    else if (http_response_code == 401)
         throw SBOLError(SBOL_ERROR_BAD_HTTP_REQUEST, "You must login with valid credentials before submitting");
-    return response;
+    else
+        throw SBOLError(SBOL_ERROR_BAD_HTTP_REQUEST, "HTTP post request failed with: " + response);
 };
 
 //std::string sbol::PartShop::submit(std::string filename, std::string collection, int overwrite)
@@ -1161,10 +1173,13 @@ void PartShop::attachFile(std::string topleveluri, std::string filename)
     curl_slist_free_all(headers);
     curl_global_cleanup();
     
-    if (http_response_code == 401)
-        throw SBOLError(SBOL_ERROR_BAD_HTTP_REQUEST, "You must login with valid credentials before submitting");
     if (Config::getOption("verbose") == "True")
         std::cout << response << std::endl;
+
+    if (http_response_code == 401)
+        throw SBOLError(SBOL_ERROR_BAD_HTTP_REQUEST, "You must login with valid credentials before submitting");
+    if (http_response_code != 200)
+        throw SBOLError(SBOL_ERROR_BAD_HTTP_REQUEST, "Attempt to attach file failed with HTTP " + to_string(http_response_code));
 };
 
 void PartShop::downloadAttachment(string attachment_uri, string path)
